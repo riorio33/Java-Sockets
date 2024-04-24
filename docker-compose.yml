@@ -1,0 +1,24 @@
+version: '3'
+services:
+  marketing:
+    build:
+      context: ./src/marketing
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+  editing:
+    build:
+      context: ./src/editing
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+  processing:
+    build:
+      context: ./src/processing
+      dockerfile: Dockerfile
+    ports:
+      - "8083:8083"
+#  message-queue:
+#    image: <message-queue-image>
+#    ports:
+#      - "9092:9092"
