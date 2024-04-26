@@ -1,14 +1,16 @@
-package Producers;
+package Departments;
 
+import com.google.gson.Gson;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 
 import java.util.Random;
 
-public class AdvertisementProducer {
+public class SeedingProducer {
     private static final String QUEUE_NAME = "advertisement_queue";
     private static final Advertisement[] advertisements = {
+            // Advertisement(String id, String company, String contact, String email, String phone, int size, int placement, String content)
             new Advertisement("abb3a102-4254-430f-8340-cb6b42981d4e", "Schaden-Terry", "Kit Vaulkhard", "kvaulkhard0@narod.ru", "3817242344", 3, 22, "Nulla tellus. In sagittis dui vel nisl."),
             new Advertisement("de2b9238-fd5b-435d-9664-5e47fcb92295", "Marks-Mayer", "Agata Colmer", "acolmer1@last.fm", "4018665037", 3, 17, "Donec ut dolor. Morbi vel lectus in quam fringilla rhoncus."),
             new Advertisement("caf78c1f-252d-44fe-991b-1ceb63479730", "D'Amore Group", "Tiphany Tamsett", "ttamsett2@spiegel.de", "5585113840", 5, 16, "Vestibulum rutrum rutrum neque. Aenean auctor gravida sem. Praesent id massa id nisl venenatis lacinia."),
@@ -43,23 +45,96 @@ public class AdvertisementProducer {
     }
 
     private static void sendAdvertisement(Advertisement advertisement) {
+        String rabbitmqHost = "localhost";
+        int rabbitmqPort = 5672;
+
         ConnectionFactory factory = new ConnectionFactory();
-        factory.setHost("localhost");
+        factory.setHost(rabbitmqHost);
+        factory.setPort(rabbitmqPort);
 
         try (Connection connection = factory.newConnection();
              Channel channel = connection.createChannel()) {
             channel.queueDeclare(QUEUE_NAME, false, false, false, null);
-            String adDetails = advertisement.toString();
+            Gson gson = new Gson();
+            String adDetails = gson.toJson(advertisement);
             channel.basicPublish("", QUEUE_NAME, null, adDetails.getBytes());
-            System.out.println("Sent advertisement: " + adDetails);
+            System.out.println("Sent advertisement to Marketing Department");
+            System.out.println(adDetails);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    record Advertisement(String id, String client, String contact, String email,
-                         String phone, Integer size, Integer placement,
-                         String text) {
+    public static class Advertisement {
+        private String id;
+        private String company;
+        private String contact;
+        private String email;
+        private String phone;
+        private int size;
+        private int placement;
+        private String description;
+
+        public Advertisement(String id, String company, String contact, String email, String phone, int size, int placement, String description) {
+            this.id = id;
+            this.company = company;
+            this.contact = contact;
+            this.email = email;
+            this.phone = phone;
+            this.size = size;
+            this.placement = placement;
+            this.description = description;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public String getClient() {
+            return company;
+        }
+
+        public String getContact() {
+            return contact;
+        }
+
+        public String getEmail() {
+            return email;
+        }
+
+        public String getPhone() {
+            return phone;
+        }
+
+        public Integer getSize() {
+            return size;
+        }
+
+        public Integer getPlacement() {
+            return placement;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public int calculateCost() {
+            return size * placement * 100;
+        }
+
+        @Override
+        public String toString() {
+            return "Advertisement{" +
+                    "id='" + id + '\'' +
+                    ", company='" + company + '\'' +
+                    ", contact='" + contact + '\'' +
+                    ", email='" + email + '\'' +
+                    ", phone='" + phone + '\'' +
+                    ", size=" + size +
+                    ", placement=" + placement + '\'' +
+                    ", description='" + description + '\'' +
+                    '}';
+        }
     }
 }
 
