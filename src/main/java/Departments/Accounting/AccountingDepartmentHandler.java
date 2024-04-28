@@ -1,6 +1,6 @@
 package Departments.Accounting;
 
-import Departments.SeedingProducer;
+import Advertiser.AdvertisementProducer;
 import com.google.gson.Gson;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
@@ -15,6 +15,7 @@ import java.util.Date;
 import java.util.Random;
 import java.util.concurrent.TimeoutException;
 import java.text.DecimalFormat;
+import java.util.function.Consumer;
 
 public class AccountingDepartmentHandler {
     private final static String PREV_QUEUE_NAME = "editing_queue";
@@ -27,13 +28,18 @@ public class AccountingDepartmentHandler {
         try {
             Connection connection = factory.newConnection();
             Channel channel = connection.createChannel();
+            AccountingSocketHandler socketHandler = new AccountingSocketHandler("localhost", 5001);
+            Consumer<String> invoiceConsumer = invoice -> {
+                System.out.println("Sending invoice to Advertiser...");
+                socketHandler.sendMessage(invoice);
+            };
 
             channel.queueDeclare(PREV_QUEUE_NAME, false, false, false, null);
             channel.queueDeclare(THIS_QUEUE_NAME, false, false, false, null);
 
             System.out.println("Accounting Department Handler started. Waiting for messages...");
 
-            channel.basicConsume(PREV_QUEUE_NAME, true, createDeliveryCallback(channel), consumerTag -> {
+            channel.basicConsume(PREV_QUEUE_NAME, true, createDeliveryCallback(channel, invoiceConsumer), consumerTag -> {
             });
 
         } catch (IOException | TimeoutException e) {
@@ -41,19 +47,19 @@ public class AccountingDepartmentHandler {
         }
     }
 
-    private static DeliverCallback createDeliveryCallback(Channel channel) {
+    private static DeliverCallback createDeliveryCallback(Channel channel, Consumer<String> invoiceConsumer) {
         Gson gson = new Gson();
-
         return (consumerTag, delivery) -> {
             byte[] messageBytes = delivery.getBody();
             String messageJson = new String(messageBytes, StandardCharsets.UTF_8);
-            System.out.println("Received message from Accounting Department!");
-            SeedingProducer.Advertisement advertisement = gson.fromJson(messageJson, SeedingProducer.Advertisement.class);
-            System.out.println(processMessage(advertisement));
+            System.out.println("Received message from Editing Department!");
+            AdvertisementProducer.Advertisement advertisement = gson.fromJson(messageJson, AdvertisementProducer.Advertisement.class);
+            String invoice = processMessage(advertisement);
+            invoiceConsumer.accept(invoice); // send back to main clause
         };
     }
 
-    private static String processMessage(SeedingProducer.Advertisement advertisement) {
+    private static String processMessage(AdvertisementProducer.Advertisement advertisement) {
         try {
             String company = advertisement.getClient();
             String contact = advertisement.getContact();
@@ -73,69 +79,55 @@ public class AccountingDepartmentHandler {
 
             DecimalFormat df = new DecimalFormat("#.##"); // Pattern for 2 decimal places
 
-            int campaignCost = calculateCampaignCost(new Random().nextInt(500) + 1);
-            double advertisingFees = advertisement.calculateCost();
-            double subtotal = campaignCost + advertisingFees;
-            double tax = subtotal * 1.15;
-            double totalAmountDue = subtotal + tax;
-
-            advertisingFees = Double.parseDouble(df.format(advertisingFees));
-            subtotal = Double.parseDouble(df.format(subtotal));
-            tax = Double.parseDouble(df.format(tax));
-            totalAmountDue = Double.parseDouble(df.format(totalAmountDue));
+            int campaignCost = new Random().nextInt(500);
+            double advertisingFees = Double.parseDouble(df.format(advertisement.calculateCost()));
+            double subtotal = Double.parseDouble(df.format(campaignCost + advertisingFees));
+            double tax = Double.parseDouble(df.format(subtotal * 1.15));
+            double totalAmountDue = Double.parseDouble(df.format(subtotal + tax));
 
             // Build the invoice
-            StringBuilder invoice = new StringBuilder();
-            invoice.append("========================================\n");
-            invoice.append("             INVOICE\n");
-            invoice.append("----------------------------------------\n");
-            invoice.append("Invoice Number: ").append(invoiceNumber).append("\n");
-            invoice.append("Date: ").append(formattedDate).append("\n");
-            invoice.append("Due Date: ").append(formattedDueDate).append("\n");
-            invoice.append("\n");
-            invoice.append("Bill To:\n");
-            invoice.append("Customer Name: ").append(company).append("\n");
-            invoice.append("Contact: ").append(contact).append("\n");
-            invoice.append("Phone: ").append(phone).append("\n");
-            invoice.append("\n");
-            invoice.append("----------------------------------------\n");
-            invoice.append("\n");
-            invoice.append("Description             Qty    Unit Price    Total\n");
-            invoice.append("----------------------------------------\n");
-            invoice.append("Marketing Campaign      1      $").append(campaignCost).append("          $").append(campaignCost).append("\n");
-            invoice.append("Advertising Fees        1      $").append(advertisingFees).append("          $").append(advertisingFees).append("\n");
-            invoice.append("----------------------------------------\n");
-            invoice.append("Subtotal:                                  $").append(subtotal).append("\n");
-            invoice.append("Tax (15%):                                 $").append(tax).append("\n");
-            invoice.append("----------------------------------------\n");
-            invoice.append("Total Amount Due:                         $").append(totalAmountDue).append("\n");
-            invoice.append("----------------------------------------\n");
-            invoice.append("\n");
-            invoice.append("Payment Information:\n");
-            invoice.append("----------------------------------------\n");
-            invoice.append("Accepted Payment Methods:\n");
-            invoice.append("- Bank Transfer\n");
-            invoice.append("- Credit Card\n");
-            invoice.append("- PayPal\n");
-            invoice.append("\n");
-            invoice.append("Bank Transfer Details:\n");
-            invoice.append("Account Number: 1234567890\n");
-            invoice.append("IBAN: GB29NWBK60161331926819\n");
-            invoice.append("\n");
-            invoice.append("Please include the invoice number in the reference when making the bank transfer.\n");
-            invoice.append("\n");
-            invoice.append("Payment is due within 60 days of the invoice date.\n");
-            invoice.append("========================================");
+            String invoice = "========================================\n" +
+                    "             INVOICE\n" +
+                    "----------------------------------------\n" +
+                    "Invoice Number: " + invoiceNumber + "\n" +
+                    "Date: " + formattedDate + "\n" +
+                    "Due Date: " + formattedDueDate + "\n" +
+                    "\n" +
+                    "Bill To:\n" +
+                    "Customer Name: " + company + "\n" +
+                    "Contact: " + contact + "\n" +
+                    "Phone: " + phone + "\n" +
+                    "\n" +
+                    "----------------------------------------\n" +
+                    "\n" +
+                    "Description             Qty    Unit Price    Total\n" +
+                    "----------------------------------------\n" +
+                    "Marketing Campaign      1      $" + campaignCost + "          $" + campaignCost + "\n" +
+                    "Advertising Fees        1      $" + advertisingFees + "          $" + advertisingFees + "\n" +
+                    "----------------------------------------\n" +
+                    "Subtotal:                                  $" + subtotal + "\n" +
+                    "Tax (15%):                                 $" + tax + "\n" +
+                    "----------------------------------------\n" +
+                    "Total Amount Due:                         $" + totalAmountDue + "\n" +
+                    "----------------------------------------\n" +
+                    "\n" +
+                    "Payment Information:\n" +
+                    "----------------------------------------\n" +
+                    "Accepted Payment Methods:\n" +
+                    "- Bank Transfer\n" +
+                    "- Credit Card\n" +
+                    "- PayPal\n" +
+                    "\n" +
+                    "Bank Transfer Details:\n" +
+                    "Account Number: 1234567890\n" +
+                    "IBAN: GB29NWBK60161331926819\n" +
+                    "\n" +
+                    "Please include the invoice number in the reference when making the bank transfer.\n" +
+                    "\n" +
+                    "Payment is due within 60 days of the invoice date.\n" +
+                    "========================================";
 
-            try {
-                System.out.println("Accounting is processing the invoice");
-                Thread.sleep(1000);
-
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            return invoice.toString();
+            return invoice;
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -150,41 +142,4 @@ public class AccountingDepartmentHandler {
         int randomNum = random.nextInt(1000);
         return "INV-" + currentDate + "-" + String.format("%03d", randomNum);
     }
-
-    private static SeedingProducer.Advertisement parseAdvertisement(String message) {
-        String[] parts = message.split(",");
-        String id = parts[0];
-        String company = parts[1];
-        String contact = parts[2];
-        String email = parts[3];
-        String phone = parts[4];
-        int size = 0;
-        int placement = 0;
-
-        for (String part : parts) {
-            if (part.trim().startsWith("size=")) {
-                try {
-                    size = Integer.parseInt(part.trim().substring(5));
-                } catch (NumberFormatException e) {
-                    // Handle invalid input for size
-                    System.err.println("Invalid size value: " + part.trim().substring(5));
-                }
-            } else if (part.trim().startsWith("placement=")) {
-                try {
-                    placement = Integer.parseInt(part.trim().substring(10));
-                } catch (NumberFormatException e) {
-                    // Handle invalid input for placement
-                    System.err.println("Invalid placement value: " + part.trim().substring(10));
-                }
-            }
-        }
-
-        String content = parts[5];
-        return new SeedingProducer.Advertisement(id, company, contact, phone, email, size, placement, content);
-    }
-
-    private static int calculateCampaignCost(int price) {
-        return (int) (price * 1.10);
-    }
-
 }
